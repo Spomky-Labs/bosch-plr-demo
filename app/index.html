@@ -1,323 +1,546 @@
-<html>
-  <head>
+<html lang="en">
+<head>
     <title>BUSH</title>
     <style>
-      body {
-        font-family: "Helvetica", sans-serif;
-        background-color: #0f171f;
-        color: #e5e5e5;
-      }
-      table {
-        margin-top: 1em;
-      }
-      table th {
-        text-align: left;
-        padding-right: 0.5em;
-      }
-      button {
-        background-color: #dedede;
-        color: #121212;
-        text-transform: capitalize;
-        border-radius: 0.2em;
-        border: none;
-        padding: 0.3em 0.7em;
-        font-weight: bold;
-      }
-      button:hover {
-        background-color: #f5f5f5;
-        cursor: pointer;
-      }
-      h1,
-      h2,
-      h3,
-      h4 {
-        color: #eeeeee;
-      }
-      #device-measurements,
-      #triggered-measurements {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5em;
-      }
-      .warning {
-        background-color: #c93939;
-        color: #f5f5f5;
-        padding: 2em;
-        border-radius: 0.2em;
-        margin-bottom: 1em;
-        display: none;
-      }
+        body {
+            font-family: "Helvetica", sans-serif;
+            background-color: #0f171f;
+            color: #e5e5e5;
+        }
+        table {
+            margin-top: 1em;
+        }
+        table th {
+            text-align: left;
+            padding-right: 0.5em;
+        }
+        button {
+            background-color: #dedede;
+            color: #121212;
+            text-transform: capitalize;
+            border-radius: 0.2em;
+            border: none;
+            padding: 0.3em 0.7em;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #f5f5f5;
+            cursor: pointer;
+        }
+        h1,
+        h2,
+        h3,
+        h4 {
+            color: #eeeeee;
+        }
+        #device-measurements,
+        #triggered-measurements {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5em;
+        }
+        .warning {
+            background-color: #c93939;
+            color: #f5f5f5;
+            padding: 2em;
+            border-radius: 0.2em;
+            margin-bottom: 1em;
+            display: none;
+        }
     </style>
     <script>
-      window.onload = function () {
-        if (!navigator.bluetooth) {
-          document.querySelector(".warning").style.display = "block";
-        }
-      };
+        window.onload = function () {
+            if (!navigator.bluetooth) {
+                document.querySelector(".warning").style.display = "block";
+            }
+        };
     </script>
-  </head>
-  <body>
-    <div class="warning">
-      <i>Navigator: bluetooth</i> is not supported in your browser. Currently,
-      it is only supported in Chrome and Edge.
-    </div>
-    <h1>PLR 50C demo</h1>
-    <p>
-      This demo uses the Bosch PLR 50C. Other Bosch laser range finders might
-      work as well but aren't tested.
-    </p>
-    <p>Check console for logs.</p>
-    <button id="connect-btn">Connect Device</button>
-    <table id="device-info">
-      <tr>
+</head>
+<body>
+<div class="warning">
+    <i>Navigator: bluetooth</i> is not supported in your browser. Currently,
+    it is only supported in Chrome and Edge.
+</div>
+<h1>PLR 50C demo</h1>
+<p>
+    This demo uses the Bosch PLR 50C. Other Bosch laser range finders might
+    work as well but aren't tested.
+</p>
+<p>Check console for logs.</p>
+<button id="connect-btn">Connect Device</button>
+<table id="device-info">
+    <tr>
         <th>Device ID</th>
         <td>-</td>
-      </tr>
-      <tr>
+    </tr>
+    <tr>
         <th>Name</th>
         <td>-</td>
-      </tr>
-      <tr>
+    </tr>
+    <tr>
         <th>Gatt Connected</th>
         <td>-</td>
-      </tr>
-      <tr>
+    </tr>
+    <tr>
         <th>Timestamp</th>
         <td>-</td>
-      </tr>
-    </table>
+    </tr>
+</table>
+<div>
+    <h2>Connected Controls</h2>
     <div>
-      <h2>Connected Controlls</h2>
-      <div>
         <button id="beep-btn">Beep</button>
-        <button id="measure-btn">Trigger measurement</button>
-        <button id="laser-on">Blink Laser</button>
-      </div>
-      <h4>Triggered Measurements (raw data)</h4>
-      <div id="triggered-measurements"></div>
+        <button id="measure-distance">Distance!</button>
+        <button id="measure-angle">Angle!</button>
     </div>
-    <div>
-      <h2>Device measurements</h2>
-      <div id="device-measurements"></div>
-    </div>
-    <script>
-      let service;
-      let bluetoothGattServer; // {connected: true, device: BluetoothDevice, …}
-      let characteristic;
+    <h4>Triggered Measurements (raw data)</h4>
+    <div id="triggered-measurements"></div>
+</div>
+<div>
+    <h2>Device measurements</h2>
+    <div id="device-measurements"></div>
+</div>
+<script>
+    let service;
+    let bluetoothGattServer; // {connected: true, device: BluetoothDevice, …}
+    let characteristic;
 
-      document
+    function crc8(buffer)
+    {
+        const crcTable = [
+            0x00, 0xA6, 0xEA, 0x4C, 0x72, 0xD4, 0x98, 0x3E, 0xE4, 0x42, 0x0E, 0xA8, 0x96, 0x30, 0x7C, 0xDA,
+            0x6E, 0xC8, 0x84, 0x22, 0x1C, 0xBA, 0xF6, 0x50, 0x8A, 0x2C, 0x60, 0xC6, 0xF8, 0x5E, 0x12, 0xB4,
+            0xDC, 0x7A, 0x36, 0x90, 0xAE, 0x08, 0x44, 0xE2, 0x38, 0x9E, 0xD2, 0x74, 0x4A, 0xEC, 0xA0, 0x06,
+            0xB2, 0x14, 0x58, 0xFE, 0xC0, 0x66, 0x2A, 0x8C, 0x56, 0xF0, 0xBC, 0x1A, 0x24, 0x82, 0xCE, 0x68,
+            0x1E, 0xB8, 0xF4, 0x52, 0x6C, 0xCA, 0x86, 0x20, 0xFA, 0x5C, 0x10, 0xB6, 0x88, 0x2E, 0x62, 0xC4,
+            0x70, 0xD6, 0x9A, 0x3C, 0x02, 0xA4, 0xE8, 0x4E, 0x94, 0x32, 0x7E, 0xD8, 0xE6, 0x40, 0x0C, 0xAA,
+            0xC2, 0x64, 0x28, 0x8E, 0xB0, 0x16, 0x5A, 0xFC, 0x26, 0x80, 0xCC, 0x6A, 0x54, 0xF2, 0xBE, 0x18,
+            0xAC, 0x0A, 0x46, 0xE0, 0xDE, 0x78, 0x34, 0x92, 0x48, 0xEE, 0xA2, 0x04, 0x3A, 0x9C, 0xD0, 0x76,
+            0x3C, 0x9A, 0xD6, 0x70, 0x4E, 0xE8, 0xA4, 0x02, 0xD8, 0x7E, 0x32, 0x94, 0xAA, 0x0C, 0x40, 0xE6,
+            0x52, 0xF4, 0xB8, 0x1E, 0x20, 0x86, 0xCA, 0x6C, 0xB6, 0x10, 0x5C, 0xFA, 0xC4, 0x62, 0x2E, 0x88,
+            0xE0, 0x46, 0x0A, 0xAC, 0x92, 0x34, 0x78, 0xDE, 0x04, 0xA2, 0xEE, 0x48, 0x76, 0xD0, 0x9C, 0x3A,
+            0x8E, 0x28, 0x64, 0xC2, 0xFC, 0x5A, 0x16, 0xB0, 0x6A, 0xCC, 0x80, 0x26, 0x18, 0xBE, 0xF2, 0x54,
+            0x22, 0x84, 0xC8, 0x6E, 0x50, 0xF6, 0xBA, 0x1C, 0xC6, 0x60, 0x2C, 0x8A, 0xB4, 0x12, 0x5E, 0xF8,
+            0x4C, 0xEA, 0xA6, 0x00, 0x3E, 0x98, 0xD4, 0x72, 0xA8, 0x0E, 0x42, 0xE4, 0xDA, 0x7C, 0x30, 0x96,
+            0xFE, 0x58, 0x14, 0xB2, 0x8C, 0x2A, 0x66, 0xC0, 0x1A, 0xBC, 0xF0, 0x56, 0x68, 0xCE, 0x82, 0x24,
+            0x90, 0x36, 0x7A, 0xDC, 0xE2, 0x44, 0x08, 0xAE, 0x74, 0xD2, 0x9E, 0x38, 0x06, 0xA0, 0xEC, 0x4A
+        ];
+        let crc = 0xAA;
+        const view = new Uint8Array(buffer);
+        for (let i = 0; i < view.length; i++) {
+            crc = crcTable[(crc ^ view[i]) & 0xFF];
+        }
+        crc ^= 0x00;
+
+        return crc;
+    }
+
+    document
         .getElementById("connect-btn")
-        .addEventListener("click", function (event) {
-          // primary service UUID
-          const glmServiceUuid = "00005301-0000-0041-5253-534f46540000";
-          const characteristicUuid = "00004301-0000-0041-5253-534f46540000";
+        .addEventListener("click", async function () {
+            // primary service UUID
+            const glmServiceUuid = "00005301-0000-0041-5253-534f46540000";
+            const characteristicUuid = "00004301-0000-0041-5253-534f46540000";
 
-          // filters used to filter out devices that are not Bosch PLR devices
-          const filters = [
-            { namePrefix: "Bosch PLR" },
-            { services: [glmServiceUuid] },
-          ];
+            // filters used to filter out devices that are not Bosch PLR devices
+            const filters = [
+                {namePrefix: "Bosch PLR"},
+                {
+                    services: [glmServiceUuid]
+                },
+            ];
 
-          navigator.bluetooth
-            .requestDevice({
-              filters,
-              optionalServices: [characteristicUuid],
-            })
-            .then((device) => {
-              console.log("Device connected: " + device.name);
-              setDeviceInfo(device);
-              return device.gatt.connect();
-            })
-            .then((server) => {
-              bluetoothGattServer = server;
-              console.log("Connected to GATT server");
-              setInfoGattConnected(server.connected);
+            const device = await navigator.bluetooth.requestDevice({filters, optionalServices: [characteristicUuid]});
+            console.log("Device connected: " + device.name);
+            setDeviceInfo(device);
+            const server = await device.gatt.connect();
+            bluetoothGattServer = server;
+            console.log("Connected to GATT server");
+            await setInfoGattConnected(server.connected);
 
-              // get primary service and then the characteristic
-              return bluetoothGattServer
-                .getPrimaryService(glmServiceUuid)
-                .then((s) => {
-                  service = s;
-                  return s.getCharacteristic(characteristicUuid);
-                });
-            })
-            .then((c) => {
-              console.log("Characteristic found");
-              characteristic = c;
-
-              // we need to enable indications to allow the device to send data without being polled
-              // startNotifications() enables indications as well as notifications
-              return c.startNotifications();
-            })
-            .then(() => {
-              // "AutoSyncEnable" command, sets the device to send data when a measurement is
-              // triggered on the device
-              const data = new Uint8Array([0xc0, 0x55, 0x02, 0x01, 0x00, 0x1a]);
-              return characteristic.writeValue(data);
-            })
-            .then(() => {
-              // add listner for events (indications) triggered by device
-              characteristic.addEventListener(
-                "characteristicvaluechanged",
-                indicationEvent
-              );
-            })
-            .then(() => {
-              console.log("Server, service, characteristic ready", {
+            // get primary service and then the characteristic
+            service = await bluetoothGattServer.getPrimaryService(glmServiceUuid);
+            characteristic = await service.getCharacteristic(characteristicUuid);
+            console.log("Characteristic found");
+            // we need to enable indications to allow the device to send data without being polled
+            // startNotifications() enables indications as well as notifications
+            await characteristic.startNotifications();
+            // "AutoSyncEnable" command, sets the device to send data when a measurement is
+            // triggered on the device
+            await characteristic.writeValue(new Uint8Array([0xc0, 0x55, 0x02, 0x01, 0x00, 0x1a]));
+            characteristic.addEventListener("characteristicvaluechanged", indicationEvent);
+            console.log("Server, service, characteristic ready", {
                 bluetoothGattServer,
                 service,
                 characteristic,
-              });
-              // a beep when we are done connecting
-              return beep();
-            })
-            .catch((error) => {
-              console.error("An error occurred: ", error);
             });
         });
 
-      document.getElementById("beep-btn").addEventListener("click", longBeep);
-
-      document.getElementById("measure-btn").addEventListener("click", () => {
+    document.getElementById("beep-btn").addEventListener("click", longBeep);
+    document.getElementById("measure-distance").addEventListener("click", async () => {
         console.log("send: measure");
-        // measure
-        return characteristic.writeValue(
-          new Uint8Array([0xc0, 0x40, 0x01, 0x00, 0xfa])
-        );
-      });
-      document.getElementById("laser-on").addEventListener("click", () => {
-        console.log("send: laser on");
-        // laser on
-        return characteristic.writeValue(
-          new Uint8Array([0xc0, 0x41, 0x00, 0x96])
-        );
-      });
+        // Switch to Distance mode
+        await changeMode(0x01);
+        // measure front rear edge
+        await measure(0x02);
+        //await beep();
+    });
 
-      function setDeviceInfo(device) {
+    document.getElementById("measure-angle").addEventListener("click", async () => {
+        console.log("send: measure");
+        // Switch to Angle mode
+        await changeMode(0x8);
+        // measure from side edge
+        await measure(0x01);
+        //await beep();
+    });
+
+    async function getMeasures() {
+        console.log("send: get measures");
+        const data = [0xc0, 83, 0x00];
+        const checksum = crc8(new Uint8Array(data));
+        console.log("send: get measure", data, checksum);
+        await characteristic.writeValue(new Uint8Array([...data, checksum]));
+        // Does not seem to work. The document is not clear on how to get the measures.
+    }
+
+    async function measure(edge) {
+        console.log("send: measure", edge);
+        const data = [0xc0, 0x40, 0x01, edge];
+        const checksum = crc8(new Uint8Array(data));
+        await characteristic.writeValue(new Uint8Array([...data, checksum]));
+    }
+
+    async function changeMode(number) {
+        console.log("send: change mode", number);
+        const data = [0xc0, 0x60, 0x01, number];
+        const checksum = crc8(new Uint8Array(data));
+        await characteristic.writeValue(new Uint8Array([...data, checksum]));
+    }
+
+    function setDeviceInfo(device) {
+        console.log("Device connected", device);
         let tableCells = document.querySelectorAll("#device-info td");
 
         tableCells[0].innerHTML = device.id;
         tableCells[1].innerHTML = device.name;
         tableCells[2].innerHTML = device.gatt.connected;
         tableCells[3].innerHTML = new Date().toISOString();
-      }
+    }
 
-      function setInfoGattConnected(gattConnected) {
+    function setInfoGattConnected(gattConnected) {
+        console.log("Gatt connected", gattConnected);
         let tableCells = document.querySelectorAll("#device-info td");
         tableCells[2].innerHTML = gattConnected;
-      }
+    }
 
-      function beep() {
+    async function beep() {
         console.log("send: beep on, beep off");
 
         // turn beeper on
-        return characteristic
-          .writeValue(new Uint8Array([0xc0, 0x45, 0x00, 0xd0]))
-          .then(() => {
-            // turn beeper off
-            return characteristic.writeValue(
-              new Uint8Array([0xc0, 0x46, 0x00, 0x58])
-            );
-          });
-      }
+        await characteristic.writeValue(new Uint8Array([0xc0, 0x45, 0x00, 0xd0]));
+        // turn beeper off
+        await characteristic.writeValue(new Uint8Array([0xc0, 0x46, 0x00, 0x58]));
+    }
 
-      function longBeep() {
+    async function longBeep() {
         console.log("Send: beep on, beep off");
         // turn beeper on
-        return characteristic
-          .writeValue(new Uint8Array([0xc0, 0x45, 0x00, 0xd0]))
-          .then(() => {
-            return new Promise((resolve) => {
-              setTimeout(() => {
-                characteristic
-                  .writeValue(new Uint8Array([0xc0, 0x46, 0x00, 0x58]))
-                  .then(resolve);
-              }, 750);
-            });
-          });
-      }
+        await characteristic.writeValue(new Uint8Array([0xc0, 0x45, 0x00, 0xd0]));
+        setTimeout(async () => {
+            await characteristic.writeValue(new Uint8Array([0xc0, 0x46, 0x00, 0x58]));
+        }, 750);
+    }
 
-      function indicationEvent(event) {
+    function indicationEvent(event) {
+        console.log("Indication event", event);
         // event.target.value is a DataView containing the characteristic's new value
-        let message = event.target.value;
+        const message = event.target.value;
 
         // Join the hexadecimal strings into a single string
-        // to desplay the full command in a human readable format
-        let hexString = dataViewToString(message);
+        // to display the full command in a human-readable format
+        const hexString = dataViewToString(message);
+        const binString = hexString.split("").map((c) => parseInt(c, 16).toString(2).padStart(4, "0")).join("");
+        const mode = message.getUint8(0);
+        const frameType = mode >> 6;
+        const requestFrameFormat = (mode & 0b00001100)>>2;
+        const responseFrameFormat = mode & 0b00000011;
 
-        if (hexString === "000082") {
-          console.log("Receive:", "OK");
-        } else if (hexString.length === 40 && hexString.startsWith("c055")) {
-          // mode: 0xc0, request-command: 0x55
-          // 0x55 is command 85 which is "Exchange data container"
-          // this example assumnes it is a distance measurement triggered
-          // from the device, other commands are not accounted for
-          // check MT_connectivity_protocol_LRF_command_set_2_5_0.pdf for more
-          console.log("Receive:", "Exchange Data Container");
-          parseExchangeDataContainer(message, hexString);
-        } else if (hexString.length === 14 && hexString.startsWith("0004")) {
-          // assume it is a measurment triggered from browser
-          console.log("Receive:", "Short Form Message");
+        const isRequest = frameType === 0b11;
+        const isResponse = frameType === 0b00;
+        const isInvalid = frameType === 0b01 || mode === 0b10;
+        const isLongRequest = isRequest && (requestFrameFormat === 0b00);
+        const isShortRequest = isRequest && (requestFrameFormat === 0b01);
+        const isExtendedRequest = isRequest && (requestFrameFormat === 0b10);
+        const isLongResponse = isResponse && (responseFrameFormat === 0b00);
+        const isShortResponse = isResponse && (responseFrameFormat === 0b01);
+        const isExtendedResponse = isResponse && (responseFrameFormat === 0b10);
 
-          // TODO: parse these into actual measurments
-          document.getElementById("triggered-measurements").innerHTML += `<span>
-            ${hexString}</span>`;
-        } else {
-          console.log("Receive:", "Unknown", hexString);
+        console.log({
+            hexString,
+            binString,
+            mode: mode.toString(2).padStart(8, "0"),
+            request: {
+                isRequest,
+                isLong: isLongRequest,
+                isShort: isShortRequest,
+                isExtended: isExtendedRequest,
+            },
+            response: {
+                isResponse,
+                isLong: isLongResponse,
+                isShort: isShortResponse,
+                isExtended: isExtendedResponse,
+            },
+            isInvalid,
+        });
+
+        if (isInvalid) {
+            console.log("Receive:", "Invalid Frame");
+            return;
         }
-      }
 
-      function parseExchangeDataContainer(message, hexString) {
-        // Create an ArrayBuffer with enough space to hold the measurement bytes
-        // Create a DataView from the ArrayBuffer
-        let measurementDataView = new DataView(new ArrayBuffer(4));
-
-        // Loop over the measurement bytes in the DataView
-        for (let i = 7; i < 11; i++) {
-          // Get the byte as an unsigned 8-bit integer
-          let byte = message.getUint8(i);
-          measurementDataView.setUint8(i - 7, byte);
+        switch(true) {
+            case isShortRequest:
+                console.log("Receive:", "Short Request Frame");
+                processShortRequestFrame(message, hexString);
+                break;
+            case isLongRequest:
+                console.log("Receive:", "Long Request Frame");
+                processLongRequestFrame(message, hexString);
+                break;
+            case isExtendedRequest:
+                console.log("Receive:", "Extended Request Frame");
+                processExtendedRequestFrame(message, hexString);
+                break;
+            case isShortResponse:
+                console.log("Receive:", "Short Response Frame");
+                processShortResponseFrame(message, hexString);
+                break;
+            case isLongResponse:
+                console.log("Receive:", "Long Response Frame");
+                processLongResponseFrame(message, hexString);
+                break;
+            case isExtendedResponse:
+                console.log("Receive:", "Extended Response Frame");
+                processExtendedResponseFrame(message, hexString);
+                break;
+            default:
+                console.log("Receive:", "Unknown", hexString);
         }
+    }
 
+    function verifyChecksum(message)
+    {
+        console.log('Verifying Checksum');
+        const messageWithoutChecksum = message.buffer.slice(0, message.byteLength - 1);
+        const calculatedChecksum = crc8(messageWithoutChecksum);
+        const checksum = message.buffer.slice(message.byteLength - 1, message.byteLength);
+
+        return calculatedChecksum === new Uint8Array(checksum)[0];
+    }
+
+    function processShortRequestFrame(message, hexString)
+    {
+        console.log('Processing Short Request Frame');
+        const data = message.getUint8(1).toString(2).padStart(8, "0");
+        console.log(data)
+        const status = message.getUint8(1);
+        const isHandRaised = (status & 0b00100000) !== 0x20;
+        const isNotReady = (status & 0b00010000) !== 0x10;
+        const isHardwareError = (status & 0b00001000) !== 0x08;
+
+        const isSuccess = (status & 0b00000111) === 0x00;
+        const isCommunicationTimeout = (status & 0b00000111) === 0x01;
+        const isModeNotSupported = (status & 0b00000111) === 0x02;
+        const isChecksumError = (status & 0b00000111) === 0x03;
+        const isCommandUnknown = (status & 0b00000111) === 0x04;
+        const isAccessLevelInvalid = (status & 0b00000111) === 0x05;
+        const isParameterInvalid = (status & 0b00000111) === 0x06;
+
+        console.log("Message:", {
+            RawMessage: message,
+            MessageAsHexString: hexString,
+            SplitIntoParts: {
+                status,
+                isHandRaised,
+                isNotReady,
+                isHardwareError,
+                isSuccess,
+                isCommunicationTimeout,
+                isModeNotSupported,
+                isChecksumError,
+                isCommandUnknown,
+                isAccessLevelInvalid,
+                isParameterInvalid,
+            }
+        });
+    }
+
+    async function processLongRequestFrame(message, hexString)
+    {
+        console.log('Processing Long Request Frame');
+        if (!verifyChecksum(message)) {
+            console.log("Receive:", "Invalid Checksum");
+            return;
+        }
         // Extract the mode, request-command, data length, data, and checksum
         let mode = hexString.slice(0, 2);
         let requestCommand = hexString.slice(2, 4);
-        let dataLength = hexString.slice(4, 6); // For LONG format
-        let data = hexString.slice(6, 6 + 2 * parseInt(dataLength, 16));
-        let checksum = hexString.slice(-2); // For LONG format
-        let measurement = measurementDataView.getFloat32(0, true);
+        let dataLengthHex = hexString.slice(4, 6);
+        let dataLength = parseInt(dataLengthHex, 16);
+        let data = dataLength === 0 ? {} : await extractData(message, 3, dataLength);
 
         console.log("Message:", {
-          RawMessage: message,
-          MessageAsHexString: hexString,
-          SplitIntoParts: {
-            mode,
-            requestCommand,
-            dataLength,
-            data,
-            checksum,
-          },
-          data: {
-            rawResult: hexString.slice(6, 14),
-            component1: hexString.slice(14, 22), // this is the measurement
-            component2: hexString.slice(22, 30),
-          },
-          measurement,
+            RawMessage: message,
+            MessageAsHexString: hexString,
+            SplitIntoParts: {
+                mode,
+                requestCommand,
+                dataLengthHex,
+                dataLength,
+            },
+            dataHex: hexString.slice(6, 6 + 2 * dataLength),
+            data
         });
 
-        let measurementSpan = document.getElementById("device-measurements");
-        measurementSpan.innerHTML += `<span>
-          ${measurement.toFixed(3)}</span>`;
-      }
+        if (data.result) {
+            const measurementSpan = document.getElementById("device-measurements");
+            measurementSpan.innerHTML += `<span>
+            ${data.result.toFixed(3)}</span>`;
+        }
+    }
 
-      function dataViewToString(dataView) {
+    function processExtendedRequestFrame(message, hexString)
+    {
+        console.log('Extended Request Frame not supported');
+    }
+
+    function processShortResponseFrame(message, hexString)
+    {
+        console.log('Short Response Frame not supported');
+    }
+
+    async function processLongResponseFrame(message, hexString)
+    {
+        console.log('Processing Long Response Frame');
+        if (!verifyChecksum(message)) {
+            console.log("Receive:", "Invalid Checksum");
+            return;
+        }
+        // Extract the mode, rdata length and data
+        let mode = hexString.slice(0, 2);
+        let dataLengthHex = hexString.slice(2, 4);
+        let dataLength = parseInt(dataLengthHex, 16);
+        let data = dataLength === 0 ? {} : await extractData(message, 2, dataLength);
+
+        console.log("Message:", {
+            RawMessage: message,
+            MessageAsHexString: hexString,
+            SplitIntoParts: {
+                mode,
+                dataLengthHex,
+                dataLength,
+            },
+            dataHex: hexString.slice(4, 4 + 2 * dataLength),
+            data
+        });
+
+        if (data.result) {
+            const measurementSpan = document.getElementById("device-measurements");
+            measurementSpan.innerHTML += `<span>
+            ${data.result.toFixed(3)}</span>`;
+        }
+    }
+
+    function processExtendedResponseFrame(message, hexString)
+    {
+        console.log('Extended Response Frame not supported');
+    }
+
+    async function extractData(message, start, length)
+    {
+        console.log('Extracting data');
+
+        switch(length) {
+            case 0:
+                return {};
+            case 4:
+                return extractSimpleResult(message, start);
+            case 16:
+                return extractResultWithComponents(message, start);
+            default:
+                console.log('Message length of '+ length+ ' is not supported');
+        }
+    }
+
+    async function extractSimpleResult(message, start)
+    {
+        console.log('Extracting simple result');
+        //Don't know what to do here.
+        //It looks like it is a measure ID (TBC)
+
+        return {};
+    }
+
+    function extractResultWithComponents(message, start)
+    {
+        console.log('Extracting result with components');
+        let DevModeRef = message.getUint8(start);
+        let DevStatus = message.getUint8(start+1);
+        let UniqueID = message.getUint16(start+2);
+
+        // Create an ArrayBuffer with enough space to hold the measurements (4 bytes
+        // Create a DataView from the ArrayBuffer
+        let resultDataView = new DataView(new ArrayBuffer(4));
+        let component1DataView = new DataView(new ArrayBuffer(4));
+        let component2DataView = new DataView(new ArrayBuffer(4));
+
+        // Loop over the measurement bytes in the DataView
+        for (let i = start+4; i < start+8; i++) {
+            // Get the byte as an unsigned 8-bit integer
+            let byte = message.getUint8(i);
+            resultDataView.setUint8(i - 4-start, byte);
+        }
+        for (let i = start+8; i < start+12; i++) {
+            let byte = message.getUint8(i);
+            component1DataView.setUint8(i - 8-start, byte);
+        }
+        for (let i = start+12; i < start+16; i++) {
+            let byte = message.getUint8(i);
+            component2DataView.setUint8(i - 12-start, byte);
+        }
+
+        return {
+            DevModeRef,
+            DevModeRefHex: DevModeRef.toString(16),
+            DevModeRefBin: DevModeRef.toString(2),
+            DevMode: DevModeRef>>2,
+            ReferenceEdge: DevModeRef & 11,
+            DevStatus,
+            DevStatusHex: DevStatus.toString(16),
+            DevStatusBin: DevStatus.toString(2),
+            MetricSystem: (DevStatus & 0b1000) !== 0,
+            LowBatteryWarning: (DevStatus & 0b0100) !== 0,
+            TemperatureWarning: (DevStatus & 0b0010) !== 0,
+            LaserStatus: (DevStatus & 0b0001) !== 0,
+            UniqueID,
+            UniqueIDHex: UniqueID.toString(16),
+            UniqueIDBin: UniqueID.toString(2),
+            result : resultDataView.getFloat32(0, true),
+            component1 : component1DataView.getFloat32(0, true),
+            component2 : component2DataView.getFloat32(0, true)
+        };
+    }
+
+    function dataViewToString(dataView) {
         let hexString = "";
         for (let i = 0; i < dataView.byteLength; i++) {
-          let byte = dataView.getUint8(i);
-          hexString += byte.toString(16).padStart(2, "0");
+            let byte = dataView.getUint8(i);
+            hexString += byte.toString(16).padStart(2, "0");
         }
         return hexString;
-      }
-    </script>
-  </body>
+    }
+</script>
+</body>
 </html>
